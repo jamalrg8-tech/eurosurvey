@@ -148,7 +148,8 @@
         </div>
         <div class="header-buttons">
           <button onclick="createNewSurvey()" class="btn-primary">+ New Survey</button>
-          <button onclick="generateProjectPDF()" class="btn-success">📄 Generate Project Report</button>
+          <button onclick="viewProjectReport()" class="btn-success" style="background: #1976D2;">👁️ View Report</button>
+          <button onclick="generateProjectPDF()" class="btn-success">📄 Download PDF</button>
         </div>
         <div id="surveys-list"></div>
       </div>
@@ -269,10 +270,17 @@
         </div>
 
         <div class="section">
-          <h3>Photos</h3>
-          <input type="file" multiple accept="image/*" onchange="handlePhotoUpload(event)">
+          <h3>Photos & Files</h3>
+          <input type="file" multiple accept="image/*,.pdf" onchange="handlePhotoUpload(event)">
           <div id="photosGallery"></div>
         </div>
+      </div>
+
+      <!-- PROJECT REPORT VIEW -->
+      <div id="report-view" class="container">
+        <button onclick="showView('surveys')" class="btn-secondary">← Back to Surveys</button>
+        <h2>Project Report</h2>
+        <div id="reportContent" style="background: white; padding: 20px; border-radius: 8px;"></div>
       </div>
     </main>
 
@@ -581,7 +589,7 @@
       let html = '<table class="surveys-table"><thead><tr><th>Location</th><th>Product Type</th><th>Width (mm)</th><th>Height (mm)</th><th>Notes</th><th>Action</th></tr></thead><tbody>';
       projectSurveys.sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate)).forEach(s => {
         const notePreview = s.notes ? s.notes.substring(0, 30) + (s.notes.length > 30 ? '...' : '') : '—';
-        html += `<tr><td><strong>${s.locationName}</strong></td><td>${s.productType || '—'}</td><td class="width-height">${s.width}</td><td class="width-height">${s.height}</td><td>${notePreview}</td><td><button onclick="openSurvey('${s.id}')" class="btn-small">Edit</button><button onclick="deleteSurvey('${s.id}')" class="btn-delete">Delete</button></td></tr>`;
+        html += `<tr><td><strong>${s.locationName}</strong></td><td>${s.productType || '—'}</td><td class="width-height">${s.width}</td><td class="width-height">${s.height}</td><td>${notePreview}</td><td><button onclick="viewSurvey('${s.id}')" class="btn-small" style="background: #1976D2;">View</button><button onclick="openSurvey('${s.id}')" class="btn-small">Edit</button><button onclick="deleteSurveyConfirm('${s.id}')" class="btn-delete">Delete</button></td></tr>`;
       });
       html += '</tbody></table>';
       list.innerHTML = html;
@@ -789,11 +797,105 @@
       }, 500);
     }
 
+    function viewSurvey(surveyId) {
+      openSurvey(surveyId);
+      // Disable all form inputs for read-only mode
+      setTimeout(() => {
+        document.querySelectorAll('#survey-view input, #survey-view textarea, #survey-view select').forEach(el => {
+          el.disabled = true;
+        });
+        document.querySelectorAll('#survey-view button').forEach(el => {
+          if (el.textContent.includes('Save') || el.textContent.includes('New Survey')) {
+            el.style.display = 'none';
+          }
+        });
+      }, 100);
+    }
+
+    function deleteSurveyConfirm(surveyId) {
+      const survey = surveys.find(s => s.id === surveyId);
+      if (!survey) return;
+
+      if (confirm(`Delete survey "${survey.locationName}"? This cannot be undone.`)) {
+        deleteSurvey(surveyId);
+      }
+    }
+
     function deleteSurvey(surveyId) {
-      if (!confirm('Delete this survey? This cannot be undone.')) return;
       surveys = surveys.filter(s => s.id !== surveyId);
       localStorage.setItem('eurosurvey_surveys', JSON.stringify(surveys));
       renderSurveysList();
+    }
+
+    function viewProjectReport() {
+      const projectSurveys = surveys.filter(s => s.projectId === currentProject.id);
+
+      if (projectSurveys.length === 0) {
+        alert('No surveys to display. Please add surveys first.');
+        return;
+      }
+
+      let html = `<h3>${currentProject.projectName}</h3>
+        <p><strong>Project #:</strong> ${currentProject.projectNumber}</p>
+        <p><strong>Client:</strong> ${currentProject.clientName}</p>
+        <p><strong>Address:</strong> ${currentProject.siteAddress}</p>
+        <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>`;
+
+      if (currentProject.projectNotes) {
+        html += `<p><strong>Notes:</strong> ${currentProject.projectNotes}</p>`;
+      }
+
+      html += `<hr style="margin: 20px 0;"><h3>Dimensions Summary</h3>
+        <table class="surveys-table" style="width: 100%;">
+        <thead><tr><th>Location</th><th>Product Type</th><th>Width (mm)</th><th>Height (mm)</th><th>Notes</th></tr></thead><tbody>`;
+
+      projectSurveys.forEach(s => {
+        const notePreview = s.notes ? s.notes.substring(0, 30) : '—';
+        html += `<tr><td>${s.locationName}</td><td>${s.productType || '—'}</td><td>${s.width}</td><td>${s.height}</td><td>${notePreview}</td></tr>`;
+      });
+
+      html += `</tbody></table><hr style="margin: 20px 0;">`;
+
+      projectSurveys.forEach((survey, index) => {
+        html += `<div style="page-break-after: always; padding: 20px 0; border-bottom: 2px solid #ddd; margin-bottom: 20px;">
+          <h3>Location ${index + 1}: ${survey.locationName}</h3>
+          <p><strong>Product Type:</strong> ${survey.productType}</p>`;
+
+        if (survey.panelType) html += `<p><strong>Panel Type:</strong> ${survey.panelType}</p>`;
+        if (survey.handleType) {
+          html += `<p><strong>Handle Type:</strong> ${survey.handleType}</p>`;
+          if (survey.handleLength) html += `<p><strong>Handle Length:</strong> ${survey.handleLength}</p>`;
+          if (survey.handleColor) html += `<p><strong>Handle Color:</strong> ${survey.handleColor}</p>`;
+          if (survey.smartLock) html += `<p><strong>Smart Lock:</strong> Yes</p>`;
+        }
+
+        html += `<p><strong>Width:</strong> ${survey.width} mm</p>
+          <p><strong>Height:</strong> ${survey.height} mm</p>
+          <p><strong>Survey Date:</strong> ${new Date(survey.createdDate).toLocaleDateString()}</p>`;
+
+        if (survey.notes) {
+          html += `<p><strong>Notes:</strong> ${survey.notes}</p>`;
+        }
+
+        if (survey.sketchData) {
+          html += `<h4>Site Sketch:</h4><img src="${survey.sketchData}" style="max-width: 100%; border: 1px solid #ddd; margin: 10px 0;">`;
+        }
+
+        if (survey.photosData && survey.photosData.length > 0) {
+          html += `<h4>Photos:</h4><div style="display: flex; gap: 10px; flex-wrap: wrap;">`;
+          survey.photosData.forEach(photo => {
+            if (photo.data.includes('data:image')) {
+              html += `<img src="${photo.data}" style="max-width: 200px; max-height: 200px; border-radius: 4px;">`;
+            }
+          });
+          html += `</div>`;
+        }
+
+        html += `</div>`;
+      });
+
+      document.getElementById('reportContent').innerHTML = html;
+      showView('report');
     }
 
     function saveSurvey() {
