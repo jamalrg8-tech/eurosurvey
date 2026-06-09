@@ -249,6 +249,7 @@
             <textarea id="surveyNotes" rows="3" placeholder="Observations, special features, etc."></textarea>
           </div>
           <button onclick="saveSurveyDetails()" class="btn-primary">💾 Save Details</button>
+          <button onclick="saveAndCreateNew()" class="btn-success">➕ New Survey</button>
         </div>
 
         <div class="section">
@@ -779,6 +780,13 @@
 
       saveSurvey();
       alert('✅ Survey details saved!');
+    }
+
+    function saveAndCreateNew() {
+      saveSurveyDetails();
+      setTimeout(() => {
+        createNewSurvey();
+      }, 500);
     }
 
     function deleteSurvey(surveyId) {
