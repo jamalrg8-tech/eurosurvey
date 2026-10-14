@@ -7,7 +7,6 @@
   <title>Eurolux Doors & Windows - Site Survey & Drawings Management</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: #f5f5f5; }
@@ -69,6 +68,19 @@
     .modal.show { display: flex; align-items: center; justify-content: center; }
     .modal-content { background-color: white; padding: 30px; border-radius: 8px; width: 95%; max-width: 900px; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
     .modal-section { background: #f9f9f9; border: 1px solid #eee; border-radius: 6px; padding: 15px; margin-bottom: 15px; }
+    .fs-hint { font-weight: 400; color: #888; font-size: 11px; }
+    .fs-picklist { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+    .fs-chip { border: 1px solid #bbb; background: #fff; color: #333; border-radius: 18px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .fs-chip.on { background: #003d7a; border-color: #003d7a; color: #fff; }
+    .fs-chip.on::before { content: '✓ '; }
+    .fs-custom { display: flex; gap: 8px; }
+    .fs-custom input { flex: 1; }
+    .fs-add-btn { background: #555; color: #fff; border: none; border-radius: 4px; padding: 0 16px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+    .fs-item-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .fs-item-name { min-width: 120px; font-weight: 600; font-size: 13px; color: #003d7a; }
+    .fs-item-row input { flex: 1; }
+    .fs-empty { color: #888; font-size: 12px; font-style: italic; padding: 4px 0; }
+    .idm-date { font-size: 22px; font-weight: 700; color: #003d7a; text-align: center; background: #eef4fb; border-radius: 6px; padding: 14px; margin: 12px 0; }
     .modal-section h4 { color: #333333; margin-bottom: 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
     .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
     .search-bar { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
@@ -430,7 +442,6 @@
           <button onclick="openAddDrawingForm()" class="btn-primary">+ Add Drawing</button>
           <button onclick="openDrawingsReport()" class="btn-success" style="background:#616161">📊 View Report</button>
           <button onclick="generateDrawingsPDF()" class="btn-success">📄 Generate PDF</button>
-          <button onclick="exportDrawingsExcel()" class="btn-success" style="background:#217346">📗 Export Excel</button>
           <button onclick="syncNow()" class="btn-success" style="background:#00796B" id="sync-btn">🔄 Sync</button>
           <span id="last-synced" style="font-size:12px;color:#888;align-self:center"></span>
         </div>
@@ -455,7 +466,6 @@
             <h2>📊 Drawings Report</h2>
             <div style="display:flex;gap:10px;align-items:center">
               <button onclick="generateDrawingsPDF()" class="btn-primary" style="font-size:13px;padding:8px 16px">📄 Export PDF</button>
-              <button onclick="exportDrawingsExcel()" class="btn-primary" style="font-size:13px;padding:8px 16px;background:#217346">📗 Export Excel</button>
               <button class="close-btn" onclick="document.getElementById('drawings-report-modal').classList.remove('show')">×</button>
             </div>
           </div>
@@ -540,7 +550,6 @@
                 <div class="form-group">
                   <label>Indicative Installation Date</label>
                   <input type="date" id="dwInstallationDate">
-                  <small style="color:#888">Auto-set to 56 days after Approval Date &mdash; you can still edit it manually.</small>
                 </div>
               </div>
             </div>
@@ -587,18 +596,22 @@
                 </div>
               </div>
             </div>
-            <!-- Production -->
+            <!-- Frame Supplier -->
             <div class="modal-section">
-              <h4>🏭 Production & Delivery</h4>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Frame Supplier</label>
-                  <input type="text" id="dwFrameSupplier" placeholder="e.g., BES Only">
+              <h4>🏭 Frame Supplier</h4>
+              <div class="form-group">
+                <label>Frame Supplier(s) <span class="fs-hint">— tap to select up to 5, or type a supplier not on the list</span></label>
+                <div id="fsPicklist" class="fs-picklist"></div>
+                <div class="fs-custom">
+                  <input type="text" id="fsCustomInput" list="fsCustomList" placeholder="Other supplier — type the name and tap Add"
+                         onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomFrameSupplier();}">
+                  <datalist id="fsCustomList"></datalist>
+                  <button type="button" class="fs-add-btn" onclick="addCustomFrameSupplier()">+ Add</button>
                 </div>
-                <div class="form-group">
-                  <label>Items List</label>
-                  <input type="text" id="dwItemsList" placeholder="e.g., Windows, Doors">
-                </div>
+              </div>
+              <div class="form-group">
+                <label>Items List <span class="fs-hint">— items each frame supplier will supply</span></label>
+                <div id="fsItemsContainer"></div>
               </div>
               <div class="form-row">
                 <div class="form-group">
@@ -648,6 +661,24 @@
               <button type="submit" class="btn-primary">💾 Save Drawing</button>
             </div>
           </form>
+        </div>
+      </div>
+      <!-- Indicative installation date popup -->
+      <div class="modal" id="install-date-modal" style="z-index:1100">
+        <div class="modal-content" style="max-width:440px">
+          <h3 style="margin-bottom:8px">📅 Indicative Installation Date</h3>
+          <p id="idm-text" style="font-size:14px;color:#444"></p>
+          <div class="idm-date" id="idm-calc"></div>
+          <p id="idm-current" style="font-size:12px;color:#888;display:none"></p>
+          <div id="idm-amend" class="form-group" style="display:none;margin-top:10px">
+            <label>Amended Installation Date</label>
+            <input type="date" id="idm-amend-input">
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
+            <button type="button" class="btn-secondary" style="margin:0" id="idm-amend-btn" onclick="idmAmend()">✏️ Amend Date</button>
+            <button type="button" class="btn-secondary" style="margin:0;display:none" id="idm-use-btn" onclick="idmUseAmended()">💾 Use Amended Date</button>
+            <button type="button" class="btn-primary" id="idm-keep-btn" onclick="idmKeep()">✅ Keep System Date</button>
+          </div>
         </div>
       </div>
     </main>
@@ -894,29 +925,6 @@
       showView('drawings');
     }
 
-    // Adds `days` calendar days to a 'YYYY-MM-DD' date string and returns
-    // the result in the same format (suitable for a <input type="date"> value).
-    function addDaysToDateStr(dateStr, days) {
-      if (!dateStr) return '';
-      const d = new Date(dateStr + 'T00:00:00');
-      if (isNaN(d.getTime())) return '';
-      d.setDate(d.getDate() + days);
-      const yyyy = d.getFullYear();
-      const mm   = String(d.getMonth() + 1).padStart(2, '0');
-      const dd   = String(d.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    }
-
-    // Whenever Approval Date is set/changed (Add or Edit form — they share
-    // the same fields), auto-set Indicative Installation Date to 56 days
-    // later. The field stays a normal editable date input afterward, so it
-    // can still be manually adjusted if needed.
-    function onApprovalDateChange() {
-      const approvalDate = document.getElementById('dwApprovalDate').value;
-      if (!approvalDate) return;
-      document.getElementById('dwInstallationDate').value = addDaysToDateStr(approvalDate, 56);
-    }
-
     function getDrawingStatusColor(status) {
       const colors = { 'Approved': '#4CAF50', 'Submitted': '#2196F3', 'Yet to be prepared': '#FF9800', 'Cancelled': '#9E9E9E' };
       return colors[status] || '#999';
@@ -1005,22 +1013,16 @@
       list.innerHTML = tableHtml;
     }
 
-    // The current search text + status dropdown, applied together — reused
-    // by the list view, the Drawings Report, and both Export PDF/Excel
-    // buttons so they always reflect what's currently filtered on screen.
-    function getFilteredDrawings() {
+    function filterDrawings() {
       const q       = (document.getElementById('drawingSearch').value || '').toLowerCase();
       const statusF = document.getElementById('drawingStatusFilter').value;
-      return drawings.filter(d => {
+      const filtered = drawings.filter(d => {
         const matchText   = !q || [d.projectNo, d.projectName, d.client, d.designer, d.frameSupplier, d.frameColor]
           .some(v => v && v.toLowerCase().includes(q));
         const matchStatus = !statusF || d.drawingStatus === statusF;
         return matchText && matchStatus;
       });
-    }
-
-    function filterDrawings() {
-      renderDrawingsList(getFilteredDrawings());
+      renderDrawingsList(filtered);
     }
 
     // Clicking a stat badge (Total / Approved / Submitted / Yet to Prepare /
@@ -1091,6 +1093,191 @@
       renderAttachmentsList();
     }
 
+    // ── FRAME SUPPLIERS ──────────────────────────────────────────────────────
+    // Stored in the existing frameSupplier / itemsList columns (no database change):
+    //   frameSupplier: "SCHUCO, VETROMAX & ALUMIL"
+    //   itemsList:     "SCHUCO: items...\nVETROMAX: items..."
+    const FRAME_SUPPLIER_OPTIONS = ['SCHUCO','VETROMAX','DECOMASTER','ORIGIN','FUSION','ATLAS','ALUMIL'];
+    const MAX_FRAME_SUPPLIERS = 5;
+    let currentFrameSuppliers = [];   // [{ name, items }]
+    let fsLegacyItems = '';           // old free-text items with no supplier, kept so nothing is lost
+
+    function fsEsc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function fsCanonical(name) {
+      const n = String(name || '').replace(/\s+/g, ' ').trim();
+      const opt = FRAME_SUPPLIER_OPTIONS.find(o => o.toLowerCase() === n.toLowerCase());
+      return opt || n;
+    }
+    function fsSplitNames(str) {
+      return String(str || '')
+        .split(/\s*(?:,|&|\/|\+|\band\b)\s*/i)
+        .map(x => fsCanonical(x.replace(/\s+only$/i, '')))
+        .filter(Boolean);
+    }
+    function loadFrameSuppliers(d) {
+      const names = [];
+      fsSplitNames(d.frameSupplier).forEach(n => { if (!names.some(x => x.toLowerCase() === n.toLowerCase())) names.push(n); });
+      const itemsMap = {}; const loose = [];
+      String(d.itemsList || '').split('\n').forEach(line => {
+        const m = line.match(/^([^:]+):\s*(.*)$/);
+        if (m && names.some(n => n.toLowerCase() === m[1].trim().toLowerCase())) itemsMap[m[1].trim().toLowerCase()] = m[2].trim();
+        else if (line.trim()) loose.push(line.trim());
+      });
+      currentFrameSuppliers = names.map(n => ({ name: n, items: itemsMap[n.toLowerCase()] || '' }));
+      fsLegacyItems = '';
+      if (loose.length) {
+        if (currentFrameSuppliers.length) {
+          const first = currentFrameSuppliers[0];
+          first.items = [first.items, loose.join(', ')].filter(Boolean).join(', ');
+        } else {
+          fsLegacyItems = loose.join('\n');
+        }
+      }
+      renderFrameSuppliers();
+    }
+    function serializeFrameSuppliers() {
+      const list = currentFrameSuppliers.filter(s => s.name);
+      const names = list.map(s => s.name);
+      const frameSupplier = names.length <= 1 ? (names[0] || '')
+        : names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
+      let itemsList = list.filter(s => (s.items || '').trim())
+        .map(s => s.name + ': ' + s.items.replace(/\s*\n\s*/g, ', ').trim()).join('\n');
+      if (!list.length && fsLegacyItems) itemsList = fsLegacyItems;
+      return { frameSupplier, itemsList };
+    }
+    function fsIndexOf(name) {
+      return currentFrameSuppliers.findIndex(s => s.name.toLowerCase() === String(name).toLowerCase());
+    }
+    function toggleFrameSupplier(name) {
+      const i = fsIndexOf(name);
+      if (i >= 0) {
+        if ((currentFrameSuppliers[i].items || '').trim() &&
+            !confirm(`Remove ${name}? Its items list will be removed too.`)) return;
+        currentFrameSuppliers.splice(i, 1);
+      } else {
+        if (currentFrameSuppliers.length >= MAX_FRAME_SUPPLIERS) {
+          alert(`A maximum of ${MAX_FRAME_SUPPLIERS} frame suppliers can be selected.`);
+          return;
+        }
+        currentFrameSuppliers.push({ name, items: '' });
+      }
+      renderFrameSuppliers();
+    }
+    function addCustomFrameSupplier() {
+      const input = document.getElementById('fsCustomInput');
+      const name = fsCanonical(input.value);
+      if (!name) { input.focus(); return; }
+      if (fsIndexOf(name) >= 0) { alert(`${name} is already selected.`); input.value = ''; return; }
+      if (currentFrameSuppliers.length >= MAX_FRAME_SUPPLIERS) {
+        alert(`A maximum of ${MAX_FRAME_SUPPLIERS} frame suppliers can be selected.`);
+        return;
+      }
+      currentFrameSuppliers.push({ name, items: '' });
+      input.value = '';
+      renderFrameSuppliers();
+    }
+    function renderFrameSuppliers() {
+      const pick = document.getElementById('fsPicklist');
+      if (!pick) return;
+      // chips: standard list + any custom suppliers already selected
+      const chipNames = FRAME_SUPPLIER_OPTIONS.slice();
+      currentFrameSuppliers.forEach(s => { if (!chipNames.some(c => c.toLowerCase() === s.name.toLowerCase())) chipNames.push(s.name); });
+      pick.innerHTML = chipNames.map(n => {
+        const on = fsIndexOf(n) >= 0;
+        return `<button type="button" class="fs-chip${on ? ' on' : ''}" data-name="${fsEsc(n)}">${fsEsc(n)}</button>`;
+      }).join('');
+      pick.querySelectorAll('.fs-chip').forEach(b => b.onclick = () => toggleFrameSupplier(b.dataset.name));
+
+      // suggestions for "Other": suppliers used on previous drawings
+      const dl = document.getElementById('fsCustomList');
+      if (dl) {
+        const seen = {};
+        (typeof drawings !== 'undefined' ? drawings : []).forEach(d => fsSplitNames(d.frameSupplier).forEach(n => {
+          if (n.length <= 30 && !FRAME_SUPPLIER_OPTIONS.includes(n)) seen[n.toLowerCase()] = seen[n.toLowerCase()] || n;
+        }));
+        dl.innerHTML = Object.values(seen).sort().map(n => `<option value="${fsEsc(n)}">`).join('');
+      }
+
+      const box = document.getElementById('fsItemsContainer');
+      if (!currentFrameSuppliers.length) {
+        box.innerHTML = `<div class="fs-empty">Select a frame supplier above to enter the items it will supply.</div>` +
+          (fsLegacyItems ? `<div class="fs-empty">Previous items note: ${fsEsc(fsLegacyItems)}</div>` : '');
+        return;
+      }
+      box.innerHTML = currentFrameSuppliers.map((s, i) => `
+        <div class="fs-item-row">
+          <span class="fs-item-name">${fsEsc(s.name)}</span>
+          <input type="text" data-idx="${i}" value="${fsEsc(s.items)}" placeholder="Items ${fsEsc(s.name)} will supply, e.g. Items 01–12, sliding doors">
+        </div>`).join('');
+      box.querySelectorAll('input[data-idx]').forEach(inp => {
+        inp.oninput = () => { currentFrameSuppliers[+inp.dataset.idx].items = inp.value; };
+      });
+    }
+
+    // ── INSTALLATION DATE (8 weeks after approval) ──────────────────────────
+    const INSTALL_WEEKS_AFTER_APPROVAL = 8;
+    let idmCalcDate = '';
+    let idmTimer = null;
+
+    function addWeeksISO(iso, weeks) {
+      const [y, m, d] = iso.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d + weeks * 7)).toISOString().slice(0, 10);
+    }
+    function idmFmt(iso) {
+      const [y, m, d] = iso.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-GB',
+        { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    }
+    function onApprovalDateChange() {
+      clearTimeout(idmTimer);
+      // short pause so typing a date digit-by-digit doesn't trigger the popup early
+      idmTimer = setTimeout(showInstallDatePopup, 900);
+    }
+    function showInstallDatePopup() {
+      const appr = document.getElementById('dwApprovalDate').value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(appr) || Number(appr.slice(0, 4)) < 2000) return;
+      if (!document.getElementById('drawing-modal').classList.contains('show')) return;
+      idmCalcDate = addWeeksISO(appr, INSTALL_WEEKS_AFTER_APPROVAL);
+      const current = document.getElementById('dwInstallationDate').value;
+      if (current === idmCalcDate) return;
+      document.getElementById('idm-text').textContent =
+        `Approval date: ${idmFmt(appr)}. The system-calculated installation date (${INSTALL_WEEKS_AFTER_APPROVAL} weeks after approval) is:`;
+      document.getElementById('idm-calc').textContent = idmFmt(idmCalcDate);
+      const cur = document.getElementById('idm-current');
+      if (current) { cur.textContent = `Current installation date: ${idmFmt(current)} — this will be replaced.`; cur.style.display = 'block'; }
+      else cur.style.display = 'none';
+      document.getElementById('idm-amend').style.display = 'none';
+      document.getElementById('idm-amend-btn').style.display = '';
+      document.getElementById('idm-use-btn').style.display = 'none';
+      document.getElementById('idm-amend-input').value = idmCalcDate;
+      document.getElementById('install-date-modal').classList.add('show');
+    }
+    function closeInstallDatePopup() {
+      document.getElementById('install-date-modal').classList.remove('show');
+    }
+    function idmKeep() {
+      document.getElementById('dwInstallationDate').value = idmCalcDate;
+      closeInstallDatePopup();
+    }
+    function idmAmend() {
+      document.getElementById('idm-amend').style.display = 'block';
+      document.getElementById('idm-amend-btn').style.display = 'none';
+      document.getElementById('idm-use-btn').style.display = '';
+      const inp = document.getElementById('idm-amend-input');
+      inp.focus();
+      try { inp.showPicker && inp.showPicker(); } catch (e) {}
+    }
+    function idmUseAmended() {
+      const v = document.getElementById('idm-amend-input').value;
+      if (!v) { alert('Please choose the amended installation date.'); return; }
+      const appr = document.getElementById('dwApprovalDate').value;
+      if (appr && v < appr && !confirm('The amended installation date is before the approval date. Use it anyway?')) return;
+      document.getElementById('dwInstallationDate').value = v;
+      closeInstallDatePopup();
+    }
+
     // ── ADD / EDIT / SAVE ────────────────────────────────────────────────────
 
     function openAddDrawingForm() {
@@ -1099,7 +1286,7 @@
       document.getElementById('drawing-form-title').textContent = 'Add New Drawing';
       ['dwProjectNo','dwProjectName','dwClient','dwDesigner','dwRevNo',
        'dwFrameColor','dwGlassSpec','dwFlyscreenSpec',
-       'dwFrameSupplier','dwItemsList','dwFlatBarWidth','dwFlatBarThickness',
+       'dwFlatBarWidth','dwFlatBarThickness',
        'dwRemarks','dwComments','dwNasLink'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
       document.getElementById('dwActionDueDate').value = '';
       setRadio('dwBoxSection', 'No');
@@ -1109,6 +1296,8 @@
        'dwProductionConfirmedDate','dwDeliveryRequestDate'].forEach(id => {
         document.getElementById(id).value = '';
       });
+      currentFrameSuppliers = []; fsLegacyItems = '';
+      renderFrameSuppliers();
       renderAttachmentsList();
       document.getElementById('drawing-modal').classList.add('show');
     }
@@ -1135,8 +1324,7 @@
       setRadio('dwFlatBars', drawing.flatBarsRequired || 'No');
       document.getElementById('dwFlatBarWidth').value          = drawing.flatBarWidth || '';
       document.getElementById('dwFlatBarThickness').value      = drawing.flatBarThickness || '';
-      document.getElementById('dwFrameSupplier').value         = drawing.frameSupplier || '';
-      document.getElementById('dwItemsList').value             = drawing.itemsList || '';
+      loadFrameSuppliers(drawing);
       document.getElementById('dwProductionConfirmedDate').value = drawing.productionConfirmedDate || '';
       document.getElementById('dwDeliveryRequestDate').value   = drawing.deliveryRequestDate || '';
       document.getElementById('dwRemarks').value               = drawing.remarks || '';
@@ -1177,8 +1365,8 @@
         flatBarsRequired:         document.querySelector('input[name="dwFlatBars"]:checked')?.value || 'No',
         flatBarWidth:             document.getElementById('dwFlatBarWidth').value.trim(),
         flatBarThickness:         document.getElementById('dwFlatBarThickness').value.trim(),
-        frameSupplier:            document.getElementById('dwFrameSupplier').value.trim(),
-        itemsList:                document.getElementById('dwItemsList').value.trim(),
+        frameSupplier:            serializeFrameSuppliers().frameSupplier,
+        itemsList:                serializeFrameSuppliers().itemsList,
         productionConfirmedDate:  document.getElementById('dwProductionConfirmedDate').value,
         deliveryRequestDate:      document.getElementById('dwDeliveryRequestDate').value,
         remarks:                  document.getElementById('dwRemarks').value.trim(),
@@ -1294,10 +1482,10 @@
           ${rf('Box Section Required', val(d.boxSection))}
           ${rf('Flat Bars Required', flatBarsDisplay)}
         </div>
-        <div class="report-section-hdr">🏭 Production & Delivery</div>
+        <div class="report-section-hdr">🏭 Frame Supplier</div>
         <div class="report-grid">
           ${rf('Frame Supplier', val(d.frameSupplier))}
-          ${rf('Items List', val(d.itemsList))}
+          ${rf('Items List', d.itemsList ? String(d.itemsList).replace(/\n/g,'<br>') : '—')}
           ${rf('Production Confirmed', fmtDate(d.productionConfirmedDate))}
           ${rf('Delivery Request', fmtDate(d.deliveryRequestDate))}
         </div>
@@ -1323,24 +1511,10 @@
         return `<div class="rfield"><div class="rfield-lbl">${label}</div><div class="rfield-val">${value}</div></div>`;
       }
 
-      const filteredDrawings = getFilteredDrawings();
-      const q       = (document.getElementById('drawingSearch').value || '').trim();
-      const statusF = document.getElementById('drawingStatusFilter').value;
-      const filterBits = [];
-      if (statusF) filterBits.push(`Status: ${statusF}`);
-      if (q) filterBits.push(`Search: "${q}"`);
-      const filterLine = filterBits.length
-        ? `<p style="color:#333;font-size:12px;margin-bottom:4px"><strong>Filtered by</strong> — ${filterBits.join(' &nbsp;|&nbsp; ')}</p>`
-        : '';
-
-      let html = filterLine + `<p style="color:#888;font-size:12px;margin-bottom:12px">Generated: ${new Date().toLocaleString('en-GB')} &nbsp;·&nbsp; Drawings in this report: <strong>${filteredDrawings.length}</strong> of ${drawings.length} total</p>`;
-
-      if (filteredDrawings.length === 0) {
-        html += `<p style="color:#888;padding:20px 0;">No drawings match the current search/status filter.</p>`;
-      }
+      let html = `<p style="color:#888;font-size:12px;margin-bottom:12px">Generated: ${new Date().toLocaleString('en-GB')} &nbsp;·&nbsp; Total drawings: <strong>${drawings.length}</strong></p>`;
 
       groups.forEach(g => {
-        const group = filteredDrawings.filter(d => d.drawingStatus === g.status);
+        const group = drawings.filter(d => d.drawingStatus === g.status);
         if (group.length === 0) return;
         html += `<div class="report-section-hdr" style="background:${g.color}">${g.label} — ${group.length} drawing${group.length!==1?'s':''}</div>`;
         group.forEach((d, idx) => {
@@ -1367,7 +1541,7 @@
               ${rfield('Box Section Required', val(d.boxSection))}
               ${d.flatBarsRequired === 'Yes' ? rfield('Flat Bars', `Yes — ${d.flatBarWidth || ''}${d.flatBarWidth && d.flatBarThickness ? ' × ' : ''}${d.flatBarThickness || ''}`.trim().replace(/^Yes — $/, 'Yes')) : rfield('Flat Bars Required', val(d.flatBarsRequired))}
               ${rfield('Frame Supplier', val(d.frameSupplier))}
-              ${rfield('Items List', val(d.itemsList))}
+              ${rfield('Items List', d.itemsList ? String(d.itemsList).replace(/\n/g,'<br>') : '—')}
               ${rfield('Production Confirmed', fmtDate(d.productionConfirmedDate))}
               ${rfield('Delivery Request', fmtDate(d.deliveryRequestDate))}
             </div>
@@ -1382,11 +1556,15 @@
     }
 
     function generateDrawingsPDF() {
-      // Always rebuild the report from the CURRENT search/status filter right
-      // before exporting — otherwise a PDF generated after changing the
-      // filter could still show an older, stale filter's drawings.
-      openDrawingsReport();
-      setTimeout(() => _exportReportPDF(), 100);
+      // Build report content first if modal isn't open
+      const modal = document.getElementById('drawings-report-modal');
+      if (!document.getElementById('drawings-report-content').innerHTML.trim()) {
+        openDrawingsReport();
+        // Wait for DOM then export
+        setTimeout(() => _exportReportPDF(), 100);
+        return;
+      }
+      _exportReportPDF();
     }
 
     function _exportReportPDF() {
@@ -1400,57 +1578,6 @@
         pagebreak:   { mode: ['avoid-all', 'css', 'legacy'] }
       };
       html2pdf().set(opt).from(el).save();
-    }
-
-    function exportDrawingsExcel() {
-      const filtered = getFilteredDrawings();
-      if (!filtered.length) { alert('No drawings match the current search/status filter.'); return; }
-      if (typeof XLSX === 'undefined') { alert('Excel export library failed to load — check your connection and try again.'); return; }
-
-      function fmtDatePlain(v) { return v ? new Date(v).toLocaleDateString('en-GB') : ''; }
-
-      const rows = filtered.map(d => ({
-        'Project No':               d.projectNo || '',
-        'Project Name':             d.projectName || '',
-        'Client':                   d.client || '',
-        'Designer':                 d.designer || '',
-        'Drawing Status':           d.drawingStatus || '',
-        'Rev No':                   d.revNo || '',
-        'Submission Date':          fmtDatePlain(d.submissionDate),
-        'Approval Date':            fmtDatePlain(d.approvalDate),
-        'Installation Date':        fmtDatePlain(d.installationDate),
-        'Frame Color':              d.frameColor || '',
-        'Glass Spec':               d.glassSpec || '',
-        'Flyscreen Spec':           d.flyscreenSpec || '',
-        'Box Section Required':     d.boxSection || '',
-        'Flat Bars Required':       d.flatBarsRequired || '',
-        'Flat Bar Width':           d.flatBarWidth || '',
-        'Flat Bar Thickness':       d.flatBarThickness || '',
-        'Frame Supplier':           d.frameSupplier || '',
-        'Items List':               d.itemsList || '',
-        'Production Confirmed Date':fmtDatePlain(d.productionConfirmedDate),
-        'Delivery Request Date':    fmtDatePlain(d.deliveryRequestDate),
-        'Remarks':                  d.remarks || '',
-        'Action Required':          d.comments || '',
-        'Action Due Date':          fmtDatePlain(d.actionDueDate),
-        'NAS Link':                 d.nasLink || '',
-        'Attachments':              (d.attachments || []).length
-      }));
-
-      try {
-        const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [
-          { wch: 12 }, { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 6 },
-          { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 18 },
-          { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 24 },
-          { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 24 }, { wch: 12 }, { wch: 26 }, { wch: 8 }
-        ];
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Drawings');
-        XLSX.writeFile(wb, 'Eurolux_Drawings_Report_' + new Date().toISOString().slice(0, 10) + '.xlsx');
-      } catch (e) {
-        alert('Excel export failed: ' + e.message);
-      }
     }
 
     // SURVEY APP FUNCTIONS (from original)
